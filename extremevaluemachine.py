@@ -8,6 +8,10 @@ from contextlib import contextmanager
 from multiprocessing import Pool,cpu_count
 import itertools as it
 import argparse
+import warnings
+
+# Suppress math warnings from scikit-learn
+warnings.filterwarnings('ignore', category=RuntimeWarning)
 
 @contextmanager
 def timer(message):
@@ -70,18 +74,23 @@ pdist_func = dist_func_lookup[args.distance]["pdist"]
 num_to_fuse = args.nfuse
 margin_scale=args.margin_scale
 
-def set_cover_greedy(universe,subsets,cost=lambda x:1.0):
+def set_cover_greedy(universe, subsets, cost=lambda x:1.0):
     """
     A greedy approximation to Set Cover.
     """
     universe = set(universe)
-    subsets = map(set,subsets)
+    # FIX: Use a list comprehension to ensure it's a reusable list of sets
+    subsets = [set(s) for s in subsets]
+    
     covered = set()
     cover_indices = []
+    
     while covered != universe:
-        max_index = (np.array(map(lambda x: len(x - covered),subsets))).argmax()
+        # FIX: Use a list comprehension to evaluate the lengths properly
+        max_index = np.array([len(x - covered) for x in subsets]).argmax()
         covered |= subsets[max_index]
         cover_indices.append(max_index)
+        
     return cover_indices
 
 def set_cover(points,weibulls,solver=set_cover_greedy):
@@ -188,12 +197,17 @@ def predict(X,points,weibulls,labels):
     return predicted_labels,fused_probs
 
 def load_data(fname):
-    with open(fname) as f:
-        data = f.read().splitlines()
-    data = [x.split(",") for x in data]
-    labels = [x[0] for x in data]
-    data = [map(lambda y: float(y),x[1:]) for x in data]
-    return np.array(data),np.array(labels)
+    # Load all data, assuming comma delimiter
+    # dtype=str loads everything as strings first so we can separate labels
+    raw_data = np.loadtxt(fname, delimiter=",", dtype=str)
+    
+    # The first column is labels
+    labels = raw_data[:, 0]
+    
+    # The rest of the columns are data, cast them to floats
+    data = raw_data[:, 1:].astype(float)
+    
+    return data, labels
 
 def get_accuracy(predictions,labels):
     return sum(predictions == labels)/float(len(predictions))
@@ -231,8 +245,11 @@ def letter_test(train_fname,test_fname):
     print("accuracy: {}".format(accuracy))
     return accuracy
 
-test_data_path = "/Users/bamorim/Documents/GitHub/Extreme-Value-Machine/TestData/test.txt"
-train_data_path = "/Users/bamorim/Documents/GitHub/Extreme-Value-Machine/TestData/train.txt"
+#test_data_path = "/Users/bamorim/Documents/GitHub/Extreme-Value-Machine/TestData/test.txt"
+#train_data_path = "/Users/bamorim/Documents/GitHub/Extreme-Value-Machine/TestData/train.txt"
+
+test_data_path = "test_synthetic.txt"
+train_data_path = "train_synthetic.txt"
 
 if __name__=="__main__":
     letter_test(train_data_path,test_data_path)
